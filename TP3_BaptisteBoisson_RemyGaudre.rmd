@@ -1,0 +1,188 @@
+---
+title: "Rapport du TP3 de Régression Linéaire"
+author: "Rémy Gaudré Baptiste Boisson"
+date: "7 juin 2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Introduction :
+
+Dans ce rapport de TP, nous allons étudier un exemple de séléction de modèles de régression linéaire avec R.
+
+Le jeu de données est tiré de Cornell et concerne des proportions de sept composants sur l'indice d'octane moteur de douze différents mélanges d'essences.
+
+X1 : Distillation directe (entre 0 et 0.21)
+X2 : Reformat (entre 0 et 0.62)
+X3 : Naphta de craquage thermique (entre 0 et 0.12)
+X4 : Naphta de craquage catalytique (entre 0 et 0.62)
+X5 : Polymère (entre 0 et 0.12)
+X6 : Alkylat (entre 0 et 0.74)
+X7 : Essence naturelle (entre 0 et 0.08)
+Y : Indice d'octane moteur
+
+
+```{r, echo=FALSE, comment=" "}
+donnees = read.csv("cornell.csv",header = TRUE,sep=",", dec=".")
+
+print(donnees)
+```
+
+
+#1. 
+Réaliser les statistiques descriptives univariées et bivariées (y versus les autres variables)\newline
+
+Pour cela, nous créont les fonction respectives "statistiques_descriptives" et "statistiques_bivariees". La fonction statistiques_descriptives nous donne le minimum, Q1(Xi), Q2(Xi), E(Xi), Q3(Xi), Max(Xi). La fonction statistiques_bivariees nous donne $\rho$(Y,Xi), et Cov(Y,Xi).
+
+
+```{r, comment=" "}
+statistiques_bivariees = function (x) {
+  return (c(cor(donnees$Y,x,use="pairwise.complete.obs"),cov(donnees$Y,x,use="pairwise.complete.obs")))
+}
+
+statistiques_descriptives = function (x) {
+  return (summary(x))
+}
+```
+
+
+Les statistiques descriptives univariées des Xi sont données ci-dessous.
+
+
+```{r, echo=FALSE, comment=" "}
+statistiques_descriptives(donnees)
+
+```
+
+
+On s'intéresse maintenant aux statistiques bivariées de Y par rapport aux Xi comme indiqué ci-dessous :
+
+```{r, echo=FALSE, comment=" "}
+a=apply(donnees,2, "statistiques_bivariees")
+knitr::kable(apply(donnees,2, "statistiques_bivariees"),8,format = "markdown",align='r')
+```
+
+
+#2.
+Réaliser le modèle de régression linéaire entre y et toutes les autres variables (fonction R : lm).
+Que constatez vous ?
+
+```{r, echo=FALSE, comment=" "}
+m0 = lm(Y~.,data=donnees)
+summary(m0)
+```
+
+On s'apperçoit déjà qu'il y a un problème de singularité. Cela signifie qu'il y a probablement 2 variables parfaitement colinéaire. Le $R^2$ est très bon ($R^2 = 99.25$%), il explique donc une grande partie de l'information. Et selon la p-value, le modèle est significatif.
+
+
+#3.
+Puisque $n =12 > p=7$, il ne reste qu'à vérifier qu'il n'y a pas une relation entre les variables
+explicatives (multi-collinéarité). En effet, les variables X's représentent les taux de chaque
+composante dans l'essence. Du coup, la somme sur ligne doit faire 100%. Vérifier (fonction apply).
+Donc on n'a pas besoin de toutes les 7 variables puisque 6 suffisent ! On calculera aussi le
+déterminant de la matrice XTX (voir cours). Utiliser la foction det en R.
+```{r, echo=FALSE, comment=" "}
+apply(donnees[,-8],1,"sum")
+
+X = matrix(ncol = 7,nrow = 12)
+
+for(i in 1:7)
+{
+  X[,i]=donnees[,i]
+}
+
+XTX=t(X)%*%X
+det(XTX)
+```
+La somme des lignes est bien égale à 100%. Le déterminant de la matrice est très proche de 0, il y a donc bien un problème de colinéarité entre les variables.
+
+#4.
+One ne peut pas donc faire un modèle avec toutes les variables. Mais lesquelles éliminer ? On
+procédera à une sélection des variables. Explorez la fonction regsubsets du package « leaps ».
+
+```{r, echo=FALSE, comment=" "}
+library(leaps)
+help(regsubsets)
+choix = regsubsets(Y ~ ., int = T, nbest = 1, nvmax = 7,method = "exh", data = donnees)
+print(summary(choix))
+
+plot(choix,scale="bic")
+```
+
+
+
+##4.a.
+Quel est le meilleur modèle ? Combien de variables fait-il rentrer dans la régression ?
+Estimer ce modèle, analyser la validité et les performances du modèle complet (R2, significativité coefficients).
+Selon le critère BIC, le meilleur modèle expliquant Y est $Y = \beta_0 +\beta_1 X_1 + \beta_2 X_4 + \beta_3 X_6$.
+
+```{r, echo=FALSE, comment=" "}
+m1=lm(Y~ X1+X4+X6,data=donnees)
+print(summary(m1))
+```
+Le modèle est le suivant : $Y = 85.9435 -14.0924 X_1 -4.9445  X_4 + 15.8852 X_6$
+Selon la p-value du modèle (p-value = 1.31e-08), le modèle est significatif. Le $R^2 = 99.15$%, donc le modèle explique $99.15$% de l'information de Y.  
+
+##4.b.
+Le meilleur modèle est le modèle avec X6 et X7.
+
+```{r, echo=FALSE, comment=" "}
+m2=lm(Y~ X6+X7,data=donnees)
+print(summary(m2))
+
+```
+
+Le meilleur modèle à 2 variables est le suivant : $Y = 84.788 + 19.504 X_6 -40.006 X_7$
+Selon la p-value du modèle (p-value = 4.44e-09), le modèle est significatif. Le $R^2 = 0.98.61$%, donc le modèle explique $98.61$% de l'information de Y. 
+
+#5
+Remplacer précédemment le critère BIC par le critère Cp, R2 ajusté (adjr2) ou encore R2.
+(évidemment AIC donne le mêmes résultats que BIC à cause du lien entre les deux critères).
+Préciser pour chaque critère le meilleur modèle. 
+
+```{r, echo=FALSE, comment=" "}
+plot(choix,scale="Cp")
+```
+\newline Selon le critère Cp, le meilleur modèle est le suivant : $Y = \beta_0 + \beta_1 X_1 + \beta_2 X_4+ \beta_3 X_6$.\newline
+
+
+```{r, echo=FALSE, comment=" "}
+plot(choix,scale="r2")
+```
+\newline
+Selon le critère du $R^2$, le meilleur modèle est le suivant : $Y = \beta_0 + \beta_1 X_1+ \beta_2 X_2+ \beta_3 X_3 + \beta_4 X_4 + \beta_5 X_5 + \beta_6 X_6$\newline
+
+
+```{r, echo=FALSE, comment=" "}
+plot(choix,scale="adjr2")
+```
+\newline
+Selon le critère du $R^2_{ajusté}$, le meilleur modèle est le suivant : $Y = \beta_0 + \beta_1 X_1+\beta_2 X_4+\beta_3 X_6$.\newline
+
+#6.
+Les recherches précédentes étaient exhaustives. Cela pose un problème lorsque le nombre de
+variables est grand. Faisons une sélection de variables pas-à-pas. 
+
+```{r, echo=FALSE, comment=" "}
+library(MASS)
+m_0=lm(donnees$Y~1, data=donnees)#modele sans aucune variable explicative
+m_all=lm(donnees$Y~., data=donnees)#modele avec toutes les variables
+m_back=stepAIC(m_all, direction="backward")
+m_forw=stepAIC(m_0,direction="forward", scope=list(upper=m_all,lower=m_0))
+m_stepwise=stepAIC(m_0,direction="both",scope=list(upper=m_all,lower=m_0))
+
+```
+
+```{r, echo=FALSE, comment=" "}
+press=function (fit) {
+  h=lm.influence(fit)$h
+  return (sqrt (mean ((residuals(fit)/(1-h))^2 )))
+}
+print(press(m_back))
+print(press(m_forw))
+print(press(m_stepwise))
+```
+Selon le critère du PRESS, le meilleur modèle est obtenu avec la méthode "forward" : $Y = \beta_0 + \beta_1 X_1+\beta_2 X_4+\beta_3 X_6+\beta_4 X_7$. 
