@@ -1,2 +1,2 @@
 # TPRegressionLineaire
-Contain all of mine practical work of linear regression
+Contain some of mine practical work of linear regression
